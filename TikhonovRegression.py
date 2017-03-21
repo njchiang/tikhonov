@@ -328,6 +328,8 @@ class _BaseTikhonovReg(six.with_metaclass(ABCMeta, LinearModel)):
                     max_iter=self.max_iter, tol=self.tol, solver=self.solver,
                     random_state=self.random_state, return_n_iter=True,
                     return_intercept=True)
+                if self.gamma is not None:
+                    self.coef_ = to_general_form(X_orig, y_orig, self.coef_.T, kp, rp, ko, to, ho).T
                 self.intercept_ += y_offset
             else:
                 self.coef_, self.n_iter_ = ridge_regression(
@@ -335,13 +337,9 @@ class _BaseTikhonovReg(six.with_metaclass(ABCMeta, LinearModel)):
                     max_iter=self.max_iter, tol=self.tol, solver=self.solver,
                     random_state=self.random_state, return_n_iter=True,
                     return_intercept=False)
+                if self.gamma is not None:
+                    self.coef_ = to_general_form(X_orig, y_orig, self.coef_.T, kp, rp, ko, to, ho).T
                 self._set_intercept(X_offset, y_offset, X_scale)
-
-        if self.gamma is not None:
-            self.coef_ = to_general_form(X_orig, y_orig, self.coef_.T, kp, rp, ko, to, ho).T
-
-        else:
-            self.coef_ = self.coef_
 
         return self
 
