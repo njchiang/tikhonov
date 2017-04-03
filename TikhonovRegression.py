@@ -113,6 +113,24 @@ def _check_alphas(alpha, n_targets):
     return alpha
 
 
+def _check_x_gamma(x, L):
+    m, n1 = x.shape
+    p, n2 = L.shape
+    if p > n2:
+        raise ValueError("Regularization matrix is rank deficient. "
+                         "Gamma does not satisfy p < n. " 
+                         "p: %d | n: %d" % (p, n2))
+    if n1 != n2:
+        raise ValueError("Number of features in data and "
+                         "regularization matrix do not "
+                         "correspond: %d != %d"
+                         % (n1, n2))
+    if m + p < n1:
+        raise ValueError("Number of data + regularization samples "
+                         "is not greater than features. M+P !> N "
+                         "m: %d | p: %d | n: %d" % (m, p, n1))
+
+
 def to_standard_form(x, y, L):
     """
     Converts x and y into "standard form" in order to efficiently solve the Tikhonov regression problem.
@@ -314,6 +332,7 @@ class _BaseTikhonovReg(six.with_metaclass(ABCMeta, LinearModel)):
 
         if self.gamma is not None:
             X_orig, y_orig = X, y
+            _check_x_gamma(X, self.gamma)
             X, y, hq, kp, rp, ko, ho, to = to_standard_form(X, y, self.gamma)
 
         if self.solver is 'cache':
