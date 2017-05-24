@@ -131,6 +131,16 @@ def _check_x_gamma(x, L):
                          "m: %d | p: %d | n: %d" % (m, p, n1))
 
 
+def find_gamma(x, cutoff=1e-14):
+    """
+    :param x: matrix of same axis 1 as data (# of features). This is used to find a Tikhonov matrix L such that:
+     inv(X.T * X) = L.T * L
+    :return: L: the Tikhonov matrix for this situation
+    """
+    _, s, vh = np.linalg.svd(x-x.mean(0), full_matrices=False)
+    return np.dot(np.diag(1/s[s > cutoff]), vh[s > cutoff, :])
+
+
 def to_standard_form(x, y, L):
     """
     Converts x and y into "standard form" in order to efficiently solve the Tikhonov regression problem.
