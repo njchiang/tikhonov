@@ -309,7 +309,7 @@ def tikhonov_regression(X, y, alpha=1.0, sample_weight=None, L=None, method='ana
 class _BaseTikhonovReg(six.with_metaclass(ABCMeta, LinearModel)):
 
     @abstractmethod
-    def __init__(self, gamma=None, alpha=1.0, fit_intercept=False, normalize=False,
+    def __init__(self, gamma='auto', alpha=1.0, fit_intercept=False, normalize=False,
                  copy_X=True, max_iter=None, tol=1e-3, singcutoff=None,
                  solver='cache', cache=None,
                  random_state=None):
@@ -342,6 +342,8 @@ class _BaseTikhonovReg(six.with_metaclass(ABCMeta, LinearModel)):
 
         if self.gamma is not None:
             X_orig, y_orig = X, y
+            if self.gamma is 'auto':
+                self.gamma = find_gamma(X, 0)
             _check_x_gamma(X, self.gamma)
             X, y, hq, kp, rp, ko, ho, to = to_standard_form(X, y, self.gamma)
 
