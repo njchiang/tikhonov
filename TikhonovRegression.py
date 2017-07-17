@@ -33,6 +33,10 @@ from sklearn.metrics.scorer import check_scoring
 # from sklearn.linear_model.sag import sag_solver
 from sklearn.linear_model.ridge import ridge_regression
 
+# TODO : use fit-transform to return the SKL version.
+# Any representational model can
+#  be brought into this diagonal form by setting the columns of M to the eigenvectors of G, each
+# one multiplied by the square root of the corresponding eigenvalue:
 
 def _qr(L):
     m, n = L.shape
