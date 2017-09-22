@@ -7,15 +7,12 @@ L2-regularized regression using a non-diagonal regularization matrix using (Trun
 # Author: Jeff Chiang <jeff.njchiang@gmail.com>
 # License: BSD 3 clause
 
-from abc import ABCMeta, abstractmethod
-import warnings
 # import time
 # import logging
 
 import numpy as np
 from scipy import linalg
-from sklearn.utils import check_consistent_length
-from sklearn.utils import check_array
+
 
 # TODO : use fit-transform to return the SKL version for just the rotation...
 
@@ -24,10 +21,29 @@ from sklearn.utils import check_array
 #  be brought into this diagonal form by setting the columns of M to the eigenvectors of G, each
 # one multiplied by the square root of the corresponding eigenvalue:
 # Or Generalized Cross validation to estimate matrix
+# One important consequence of Eq 12 is that the same representational model can be
+# defined using different feature sets. Because a representational model is defined by its second
+# moment, two feature sets M1 and M2, combined with corresponding second moment matrices
+# of the weights, O1 and O2, define the same representational model, if
+#     G ¼ M1 O1MT
+# 1 ¼ M2O2MT
+# 2 :
 
-def _qr(L):
-    m, n = L.shape
-    q, r = np.linalg.qr(L, mode='complete')
+# diedrichsen method
+def _compute_g(u):
+    return np.dot(u, u.T)/u.shape[1]
+
+
+def _update_m(m, g):
+    pass
+# Any representational model can
+#  be brought into this diagonal form by setting the columns of M to the eigenvectors of G, each
+# one multiplied by the square root of the corresponding eigenvalue:
+
+# QR method
+def _qr(x):
+    m, n = x.shape
+    q, r = np.linalg.qr(x, mode='complete')
     rp = r[:n, :]
     qp = q[:, :n]
     qo = q[:, n:]
@@ -37,23 +53,10 @@ def _qr(L):
     return qp, qo, rp
 
 
-def _check_alphas(alpha, n_targets):
-    # There should be either 1 or n_targets penalties
-    alpha = np.asarray(alpha).ravel()
-    if alpha.size not in [1, n_targets]:
-        raise ValueError("Number of targets and number of penalties "
-                         "do not correspond: %d != %d"
-                         % (alpha.size, n_targets))
-
-    if alpha.size == 1 and n_targets > 1:
-        alpha = np.repeat(alpha, n_targets)
-
-    return alpha
-
 # TODO : estimate datas, and take covariance matrix.
-def _check_x_gamma(x, L):
+def _check_x_gamma(x, gamma):
     m, n1 = x.shape
-    p, n2 = L.shape
+    p, n2 = gamma.shape
     if p > n2:
         raise ValueError("Regularization matrix is rank deficient. "
                          "Gamma does not satisfy p < n. " 
@@ -80,7 +83,7 @@ def find_gamma(x, cutoff=1e-14):
     return np.dot(np.diag(1/s[s > cutoff]), vh[s > cutoff, :])
 
 
-def to_standard_form(x, y, L):
+def to_standard_form(x, y, gamma):
     """
     Converts x and y into "standard form" in order to efficiently solve the Tikhonov regression problem.
     L is the Tikhonov regularizer, such that L.T * L can be the inverse covariance matrix of the data.
@@ -91,7 +94,7 @@ def to_standard_form(x, y, L):
     y :
     :param y: array-like, shape = [n_samples] or [n_samples, n_targets]
         Target values
-    :param L: array-like, shape = [n_features, n_regularizers]
+    :param gamma: array-like, shape = [n_features, n_regularizers]
         Generally, L.T * L is the inverse covariance matrix of the data.
 
     :return:
@@ -102,7 +105,7 @@ def to_standard_form(x, y, L):
     to : {array-like or 1}
     ho : {array-like or 1}
     """
-    kp, ko, rp = _qr(L.T)
+    kp, ko, rp = _qr(gamma.T)
     if ko.shape is ():  # there is no lower part of matrix
         ho, hq, to = np.array(1.0), np.array(1.0), np.array(1.0)
     else:
@@ -114,9 +117,9 @@ def to_standard_form(x, y, L):
     # L_inv = np.dot(kp, rp_inv.T)
     # x_new = reduce(np.dot, [hq.T, x, L_inv])
     # solving triangular
-    x_new = linalg.solve_triangular(rp, reduce(np.dot, [kp.T, x.T, hq])).T
+    x_new = linalg.solve_triangular(rp, np.dot(kp.T, np.dot(x.T, hq))).T
     y_new = np.dot(hq.T, y)
-    if hq.shape is (): # special case where L is square (saves computational time later
+    if hq.shape is ():  # special case where L is square (saves computational time later
         ko, to, ho = None, None, None
     return x_new, y_new, hq, kp, rp, ko, ho, to
 
@@ -148,12 +151,12 @@ def to_general_form(x, y, b, kp, rp, ko=None, to=None, ho=None):
     # this should work, but for some reason it is not 0 when L is square.
     # hot fix for now.
     if ko is to is ho is None:
-        Li = np.dot(kp, np.linalg.inv(rp.T))
-        return np.dot(Li, b)
+        gamma_inv = np.dot(kp, np.linalg.inv(rp.T))
+        return np.dot(gamma_inv, b)
         # return np.linalg.solve(np.dot(rp.T, kp.T), b)
     else:
-        Li = np.dot(kp, np.linalg.inv(rp.T))
-        kth = reduce(np.dot, [ko, np.linalg.inv(to), ho.T])
-        resid = y - reduce(np.dot, [x, Li, b])
+        gamma_inv = np.dot(kp, np.linalg.inv(rp.T))
+        kth = np.dot(ko, np.dot(np.linalg.inv(to, ho.T)))
+        resid = y - np.dot(x, np.dot(gamma_inv, b))
         # kth and resid should be 0...
-        return np.dot(Li, b) + np.dot(kth, resid)
+        return np.dot(gamma_inv, b) + np.dot(kth, resid)
