@@ -17,28 +17,16 @@ from scipy import linalg
 # TODO : use fit-transform to return the SKL version for just the rotation...
 
 # FunctionTransformer: func = to_standard, inverse_func = to_original
-# Any representational model can
-#  be brought into this diagonal form by setting the columns of M to the eigenvectors of G, each
-# one multiplied by the square root of the corresponding eigenvalue:
-# Or Generalized Cross validation to estimate matrix
-# One important consequence of Eq 12 is that the same representational model can be
-# defined using different feature sets. Because a representational model is defined by its second
-# moment, two feature sets M1 and M2, combined with corresponding second moment matrices
-# of the weights, O1 and O2, define the same representational model, if
-#     G ¼ M1 O1MT
-# 1 ¼ M2O2MT
-# 2 :
-
 # diedrichsen method
+# should be run on betas, not raw signal
 def _compute_g(u):
     return np.dot(u, u.T)/u.shape[1]
 
 
-def _update_m(m, g):
-    pass
-# Any representational model can
-#  be brought into this diagonal form by setting the columns of M to the eigenvectors of G, each
-# one multiplied by the square root of the corresponding eigenvalue:
+def _rotate_m(m, u):
+    u, s, _ = np.linalg.svd(u/np.sqrt(u.shape[1]))
+    return np.dot(u, np.diag(s))
+
 
 # QR method
 def _qr(x):
@@ -59,7 +47,7 @@ def _check_x_gamma(x, gamma):
     p, n2 = gamma.shape
     if p > n2:
         raise ValueError("Regularization matrix is rank deficient. "
-                         "Gamma does not satisfy p < n. " 
+                         "Gamma does not satisfy p < n. "
                          "p: %d | n: %d" % (p, n2))
     if n1 != n2:
         raise ValueError("Number of features in data and "
@@ -72,6 +60,11 @@ def _check_x_gamma(x, gamma):
                          "m: %d | p: %d | n: %d" % (m, p, n1))
 
 
+def analytic_tikhonov(x, y, alpha, gamma):
+    return np.dot(np.linalg.inv(np.dot(x.T, x) +
+                                np.linalg.inv(gamma) *
+                                alpha), np.dot(x.T, y))
+
 def find_gamma(x, cutoff=1e-14):
     ## TODO: fix
     """
@@ -83,6 +76,7 @@ def find_gamma(x, cutoff=1e-14):
     return np.dot(np.diag(1/s[s > cutoff]), vh[s > cutoff, :])
 
 
+# ONLY IF GAMMA IS KNOWN
 def to_standard_form(x, y, gamma):
     """
     Converts x and y into "standard form" in order to efficiently solve the Tikhonov regression problem.
