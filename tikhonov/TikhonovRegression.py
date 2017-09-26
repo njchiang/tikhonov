@@ -65,9 +65,11 @@ def analytic_tikhonov(x, y, alpha, gamma):
                                 np.linalg.inv(gamma) *
                                 alpha), np.dot(x.T, y))
 
+
 def find_gamma(x, cutoff=1e-14):
     ## TODO: fix
     """
+    Cholesky decomposition if covariance matrix is given...
     :param x: matrix of same axis 1 as data (# of features). This is used to find a Tikhonov matrix L such that:
      inv(X.T * X) = L.T * L
     :return: L: the Tikhonov matrix for this situation
