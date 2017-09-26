@@ -13,6 +13,7 @@ rotating the original problem should be faster
 # License: BSD 3 clause
 import numpy as np
 from scipy.linalg import solve_triangular
+from sklearn.linear_model import Ridge
 # from sklearn.preprocessing import FunctionTransformer
 
 
@@ -154,3 +155,17 @@ def to_general_form(b, x, y, gamma):
         resid = y - np.dot(x, np.dot(gamma_inv, b))
         # kth and resid should be 0...
         return np.dot(gamma_inv, b) + np.dot(kth, resid)
+
+
+def fit_learner(x, y, gamma, ridge=None):
+    """
+    Returns an trained model that works exactly the same as Ridge,
+    but fit optimally
+    """
+    if ridge is None:
+        ridge = Ridge()
+    x_new, y_new = to_standard_form(x, y, gamma)
+    ta_est_standard = ridge.fit(x_new, y_new).coef_
+    ta_est = to_general_form(ta_est_standard, x, y, gamma)
+    ridge.coef_ = ta_est
+    return ridge
