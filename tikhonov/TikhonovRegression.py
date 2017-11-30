@@ -53,29 +53,33 @@ def analytic_tikhonov(x, y, alpha, sigma=None):
                   alpha), np.dot(x.T, y))
 
 
-def find_gamma(x):
+def find_tikhonov_matrix(x, cutoff=.0001):
     """
-    Cholesky decomposition if covariance matrix is given
-    :param x: feature x feature covariance matrix. This is used to
+    Use truncated-SVD to find Tikhonov matrix
+    :param x: feature x feature covariance matrix inverse. This is used to
     find a Tikhonov matrix L such that:
-     inv(X.T * X) = L.T * L
+     inv(x) = L.T * L
+    :param cutoff: cutoff value for singular value magnitude. if it's too low,
+    rank will suffer.
     :return: L: the Tikhonov matrix for this situation
     """
     if not np.all(x.T == x):
         raise ValueError("Input matrix is not symmetric. "
                          "Are you sure it is covariance?")
-    return np.linalg.cholesky(np.linalg.pinv(x)).T
+    _, s, vt = np.linalg.svd(np.linalg.pinv(x))
+    return np.dot(np.diag(np.sqrt(s[s > cutoff])), vt[s > cutoff])
+    # return np.linalg.cholesky(np.linalg.pinv(x)).T
     # _, s, vh = np.linalg.svd(x-x.mean(0), full_matrices=False)
     # return np.dot(np.diag(1/s[s > cutoff]), vh[s > cutoff, :])
 
 
-def _standarize_params(x, gamma):
+def _standardize_params(x, L):
     """
     Calculates parameters associated with rotating the data to standard form
     :param x: {array-like},
         shape = [n_samples, n_features]
         Training data    b = inv(X.T*X + inv(Sigma)*alpha) * X.T * y
-    :param gamma: array-like, shape = [n_features, n_regularizers].
+    :param L: array-like, shape = [n_features, n_regularizers].
         Tikhonov matrix
     returns:
         hq: array-like
@@ -91,7 +95,7 @@ def _standarize_params(x, gamma):
         ho: array-like, shape = [n_samples] or [n_samples, n_targets]
             Target values
     """
-    kp, ko, rp = _qr(gamma.T)
+    kp, ko, rp = _qr(L.T)
     if ko.shape is ():  # there is no lower part of matrix
         ho, hq, to = np.array(1.0), np.array(1.0), np.array(1.0)
     else:
@@ -102,7 +106,7 @@ def _standarize_params(x, gamma):
     return hq, kp, rp, ko, ho, to
 
 
-def to_standard_form(x, y, gamma):
+def to_standard_form(x, y, L):
     """
     Converts x and y into "standard form" in order to efficiently
     solve the Tikhonov regression problem.
@@ -113,14 +117,14 @@ def to_standard_form(x, y, gamma):
         Training data
     :param y: array-like, shape = [n_samples] or [n_samples, n_targets]
         Target values
-    :param gamma: array-like, shape = [n_features, n_regularizers]
+    :param L: array-like, shape = [n_features, n_regularizers]
         Generally, L.T * L is the inverse covariance matrix of the data.
 
     :return:
     x_new : {array-like}, transformed x
     y_new : {array-like}, transformed y
     """
-    hq, kp, rp, _, _, _ = _standarize_params(x, gamma)
+    hq, kp, rp, _, _, _ = _standardize_params(x, L)
     # this is derived by doing a bit of algebra:
     # x_new = hq.T * x * kp * inv(rp).T
     x_new = solve_triangular(rp, np.dot(kp.T, np.dot(x.T, hq))).T
@@ -128,7 +132,7 @@ def to_standard_form(x, y, gamma):
     return x_new, y_new
 
 
-def to_general_form(b, x, y, gamma):
+def to_general_form(b, x, y, L):
     """
     Converts weights back into general form space.
     :param x: {array-like},
@@ -138,34 +142,54 @@ def to_general_form(b, x, y, gamma):
         Target values
     :param b: array-like, shape = [n_features] or [n_features, n_targets]
         regression coefficients
-    :param gamma: arra-like, shape = [n_features, n_regularizers]
-        Generally, gamma.T* gamma is the inverse covariance matrix of the data
+    :param L: arra-like, shape = [n_features, n_regularizers]
+        Generally, L.T* L is the inverse covariance matrix of the data
     :return:
     b : ridge coefficients rotated back to original space
     """
-    hq, kp, rp, ko, ho, to = _standarize_params(x, gamma)
+    hq, kp, rp, ko, ho, to = _standardize_params(x, L)
 
     if ko is to is ho is None:
-        gamma_inv = np.dot(kp, np.linalg.pinv(rp.T))
-        return np.dot(gamma_inv, b)
+        L_inv = np.dot(kp, np.linalg.pinv(rp.T))
+        return np.dot(L_inv, b)
         # return np.linalg.solve(np.dot(rp.T, kp.T), b)
     else:
-        gamma_inv = np.dot(kp, np.linalg.inv(rp.T))
+        L_inv = np.dot(kp, np.linalg.inv(rp.T))
         kth = np.dot(ko, np.dot(np.linalg.inv(to, ho.T)))
-        resid = y - np.dot(x, np.dot(gamma_inv, b))
+        resid = y - np.dot(x, np.dot(L_inv, b))
         # kth and resid should be 0...
-        return np.dot(gamma_inv, b) + np.dot(kth, resid)
+        return np.dot(L_inv, b) + np.dot(kth, resid)
 
 
-def fit_learner(x, y, gamma, ridge=None):
+def fit_learner(x, y, L, ridge=None):
     """
     Returns an trained model that works exactly the same as Ridge,
     but fit optimally
     """
     if ridge is None:
-        ridge = Ridge()
-    x_new, y_new = to_standard_form(x, y, gamma)
+        ridge = Ridge(fit_intercept=False)
+    x_new, y_new = to_standard_form(x, y, L)
     ta_est_standard = ridge.fit(x_new, y_new).coef_
-    ta_est = to_general_form(ta_est_standard, x, y, gamma)
+    ta_est = to_general_form(ta_est_standard, x, y, L)
     ridge.coef_ = ta_est
     return ridge
+
+class Tikhonov(Ridge):
+    def __init__(self, alpha=1.0, fit_intercept=False, normalize=False,
+                 copy_X=True, max_iter=None, tol=1e-3, solver="auto",
+                 random_state=None):
+        super().__init__(alpha=alpha, fit_intercept=fit_intercept,
+                                    normalize=normalize, copy_X=copy_X,
+                                    max_iter=max_iter, tol=tol, solver=solver,
+                                    random_state=random_state)
+
+    def fit(self, X, y, L=None, sample_weight=None):
+        if L is not None:
+            x_new, y_new = to_standard_form(X, y, L)
+            super(Ridge, self).fit(x_new, y_new, sample_weight=sample_weight)
+            standard_coefs = to_general_form(self.coef_, x, y, L)
+            self.coef_ = standard_coefs
+        else:
+            super(Ridge, self).fit(X, y, sample_weight=sample_weight)
+
+        return self
