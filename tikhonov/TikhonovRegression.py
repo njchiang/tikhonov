@@ -13,7 +13,7 @@ rotating the original problem should be faster
 # License: BSD 3 clause
 import numpy as np
 from scipy.linalg import solve_triangular
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, RidgeCV
 from sklearn.utils import check_X_y
 # from sklearn.preprocessing import FunctionTransformer
 
@@ -179,6 +179,7 @@ def fit_learner(x, y, L, ridge=None):
 
 
 class Tikhonov(Ridge):
+
     def __init__(self, alpha=1.0, fit_intercept=True, normalize=False,
                  copy_X=True, max_iter=None, tol=1e-3, solver="auto",
                  random_state=None):
@@ -213,6 +214,47 @@ class Tikhonov(Ridge):
             self.coef_ = standard_coefs.T
         else:
             super(Ridge, self).fit(X, y, sample_weight=sample_weight)
+
+        self._set_intercept(X_offset, y_offset, X_scale)
+        return self
+
+
+class TikhonovCV(RidgeCV):
+
+    def __init__(self, alphas=(0.1, 1.0, 10.0),
+                 fit_intercept=True, normalize=False, scoring=None, copy_X=True,
+                 cv=None, gcv_mode=None,
+                 store_cv_values=False):
+        self.alphas = alphas
+        self.fit_intercept = fit_intercept
+        self.normalize = normalize
+        self.scoring = scoring
+        self.cv = cv
+        self.gcv_mode = gcv_mode
+        self.store_cv_values = store_cv_values
+        self.copy_X = copy_X
+
+    def fit(self, X, y, L=None, sample_weight=None):
+
+        X, y = check_X_y(X, y, ['csr', 'csc', 'coo'], dtype=np.float64,
+                         multi_output=True, y_numeric=True)
+
+        if ((sample_weight is not None) and
+                    np.atleast_1d(sample_weight).ndim > 1):
+            raise ValueError("Sample weights must be 1D array or scalar")
+
+        X, y, X_offset, y_offset, X_scale = self._preprocess_data(
+            X, y, self.fit_intercept, self.normalize, self.copy_X,
+            sample_weight=sample_weight)
+
+        if L is not None:
+            x_new, y_new = to_standard_form(X, y, L)
+            model = super(RidgeCV, self)
+            model.fit(x_new, y_new, sample_weight=sample_weight)
+            standard_coefs = to_general_form(self.coef_.T, X, y, L)
+            self.coef_ = standard_coefs.T
+        else:
+            super(RidgeCV, self).fit(X, y, sample_weight=sample_weight)
 
         self._set_intercept(X_offset, y_offset, X_scale)
         return self
