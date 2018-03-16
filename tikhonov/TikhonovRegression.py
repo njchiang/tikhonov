@@ -69,8 +69,10 @@ def find_tikhonov_from_covariance(x, cutoff=.0001, eps=1e-10):
     if not np.allclose(x.T, x):
         raise ValueError("Input matrix is not symmetric. "
                          "Are you sure it is covariance?")
-    _, s, vt = np.linalg.svd(np.linalg.pinv(x))
-    return np.dot(np.diag(np.sqrt(s[s > cutoff])), vt[s > cutoff])
+    _, s, vt = np.linalg.svd(x)
+    return np.dot(np.diag(1/np.sqrt(s[s > cutoff])), vt[s > cutoff])
+    # _, s, vt = np.linalg.svd(np.linalg.pinv(x))
+    # return np.dot(np.diag(np.sqrt(s[s > cutoff])), vt[s > cutoff])
     # return np.linalg.cholesky(np.linalg.pinv(x)).T
     # _, s, vh = np.linalg.svd(x-x.mean(0), full_matrices=False)
     # return np.dot(np.diag(1/s[s > cutoff]), vh[s > cutoff, :])
